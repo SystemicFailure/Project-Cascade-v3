@@ -2717,16 +2717,26 @@ def section_bifurcation_point():
 def execute_routine(script_name, routine_name):
     """Execute a routine script and display output"""
     try:
-        # Try to find script in cascade_updates directory first
-        cascade_updates_dir = '/home/claude/cascade_updates'
-        script_path = os.path.join(cascade_updates_dir, script_name)
+        # Try multiple possible locations for the script
+        possible_dirs = [
+            '/home/claude/cascade_updates',  # Local development
+            '/app',  # Streamlit Cloud
+            os.getcwd(),  # Current working directory
+            os.path.dirname(os.path.abspath(__file__))  # Script directory
+        ]
 
-        # If not found, try current working directory
-        if not os.path.exists(script_path):
-            script_path = os.path.join(os.getcwd(), script_name)
+        script_path = None
+        cascade_updates_dir = None
 
-        if not os.path.exists(script_path):
-            st.error(f"Script not found: {script_path}")
+        for dir_path in possible_dirs:
+            candidate_path = os.path.join(dir_path, script_name)
+            if os.path.exists(candidate_path):
+                script_path = candidate_path
+                cascade_updates_dir = dir_path
+                break
+
+        if not script_path or not cascade_updates_dir:
+            st.error(f"Script not found: {script_name}. Tried: {', '.join(possible_dirs)}")
             return
 
         st.info(f"Executing {routine_name}...")
@@ -2875,15 +2885,8 @@ def section_routines():
     col1, col2, col3 = st.columns([3, 1, 1])
     with col2:
         if st.button("Run Now", key="run_routine_1"):
-            # Import and run directly instead of subprocess
-            try:
-                import importlib.util
-                spec = importlib.util.spec_from_file_location("import_substack_imap", "/home/claude/cascade_updates/import_substack_imap.py")
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                st.success("Gmail Message Analysis completed successfully")
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+            # Execute via subprocess for proper environment and path handling
+            execute_routine("import_substack_imap.py", "Gmail Message Analysis")
     with col3:
         st.write("")
 
