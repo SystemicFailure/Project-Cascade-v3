@@ -231,7 +231,8 @@ def section_summary():
     robustness_data = get_system_robustness_trajectory()
     if robustness_data:
         robust_df = pd.DataFrame(robustness_data)
-        robust_df['date_recorded'] = pd.to_datetime(robust_df['date_recorded'])
+        robust_df['date_recorded'] = pd.to_datetime(robust_df['date_recorded'], errors='coerce')
+        robust_df = robust_df.dropna(subset=['date_recorded'])  # Remove rows with invalid dates
 
         fig = px.line(robust_df, x='date_recorded', y='value',
                      title="System Robustness Over Time",
@@ -272,10 +273,11 @@ def section_summary():
     signals = get_all_signals(limit=20)
     if signals:
         signals_df = pd.DataFrame(signals)
-        signals_df['date_recorded'] = pd.to_datetime(signals_df['date_recorded'])
+        signals_df['date_recorded'] = pd.to_datetime(signals_df['date_recorded'], errors='coerce')
         display_cols = ['node_id', 'domain', 'severity', 'source', 'date_recorded']
         signals_df = signals_df[display_cols]
         signals_df.columns = ['Node', 'Domain', 'Severity', 'Source', 'Date']
+        signals_df = signals_df.dropna(subset=['Date'])  # Remove rows with invalid dates
         st.dataframe(signals_df, width='stretch', hide_index=True)
     else:
         st.info("No signals recorded yet")
