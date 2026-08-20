@@ -12,7 +12,7 @@ token.pickle
 secrets.yaml
 
 # Configuration (use templates instead)
-cascade_config.json
+
 
 # Python
 __pycache__/

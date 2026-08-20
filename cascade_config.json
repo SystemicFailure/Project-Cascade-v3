@@ -1,0 +1,31 @@
+{
+  "google_account": {
+    "active_account": "tgps.drstrangelove@gmail.com",
+    "account_description": "New primary account (2026-08-20 onwards)",
+    "fallback_account": "dr.stranelove@gmail.com",
+    "fallback_description": "Original account (recovery option if restored within 48hrs)"
+  },
+  "google_drive": {
+    "project_cascade_folder": "Project_Cascade",
+    "reference_files": {
+      "daily_findings": "daily_findings.md",
+      "dan_evidence": "DAN_CASCADE_MECHANISM_EVIDENCE_20260818.md",
+      "confluence_state": "confluence_state.md",
+      "confluence_analysis": "Project_Confluence_Analysis.md",
+      "confluence_map": "Project_Confluence_System_Map.md",
+      "confluence_excel": "Project_Confluence_Excel_Data.xlsx"
+    }
+  },
+  "database": {
+    "location": "local",
+    "path": "cascade_data.db",
+    "description": "SQLite database - lives on user's desktop, not in Google Drive"
+  },
+  "mcp_authentication": {
+    "service": "google_drive",
+    "account_email": "tgps.drstrangelove@gmail.com",
+    "auth_method": "oauth2_installed_app",
+    "note": "Update this field to switch accounts"
+  },
+  "timestamp": "2026-08-20T03:15:00Z"
+}
