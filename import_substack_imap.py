@@ -7,8 +7,27 @@ Tracks analyzed messages to avoid duplicates
 Frequency: Hourly at :48 minutes past each hour (UTC)
 """
 
+# STARTUP CHECK
+print("[STARTUP] import_substack_imap.py is starting...", flush=True)
+
 import sys
 import subprocess
+import os
+
+# Add cascade_app_package to path (contains the correct cascade_db)
+possible_paths = [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cascade_app_package'),
+    '/home/claude/cascade_updates/cascade_app_package',
+    '/home/claude/confluence/cascade_app_package'
+]
+cascade_app_package_path = None
+for path in possible_paths:
+    if os.path.exists(os.path.join(path, 'cascade_db.py')):
+        cascade_app_package_path = path
+        break
+
+if cascade_app_package_path:
+    sys.path.insert(0, cascade_app_package_path)
 
 # Ensure required packages are available (install if missing in cloud environment)
 try:
@@ -22,7 +41,6 @@ from email.header import decode_header
 from cascade_db import add_signal, add_finding, is_message_analyzed, mark_message_analyzed, get_all_goals
 from datetime import datetime
 import configparser
-import os
 import re
 
 def fetch_all_gmail_messages(gmail_user, app_password):
@@ -146,21 +164,71 @@ def load_config():
     """Load Gmail credentials from config.ini"""
     config = configparser.ConfigParser()
 
-    if not os.path.exists('config.ini'):
+    # Look for config.ini in multiple locations (order: most specific first)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        # Direct script directory
+        os.path.join(script_dir, 'config.ini'),
+        # Streamlit Cloud common paths
+        '/home/appuser/cascade_updates/config.ini',
+        '/app/cascade_updates/config.ini',
+        '/workspace/cascade_updates/config.ini',
+        # Original paths
+        '/home/claude/cascade_updates/config.ini',
+        '/root/cascade_updates/config.ini',
+        os.path.expanduser('~/cascade_updates/config.ini'),
+        # Working directory variants
+        os.path.join(os.getcwd(), 'config.ini'),
+        os.path.join(os.getcwd(), 'cascade_updates', 'config.ini'),
+        os.path.join(os.getcwd(), '..', 'config.ini'),
+        # Root level
+        '/cascade_updates/config.ini',
+        'config.ini'
+    ]
+
+    # Debug: write detailed log to file
+    debug_file = '/tmp/config_search.log'
+    with open(debug_file, 'w') as f:
+        f.write(f"Script location: {os.path.abspath(__file__)}\n")
+        f.write(f"Current working directory: {os.getcwd()}\n")
+        f.write(f"Script dir: {script_dir}\n")
+        f.write(f"Checking {len(possible_paths)} possible paths:\n\n")
+
+        for i, path in enumerate(possible_paths, 1):
+            expanded_path = os.path.expanduser(path)
+            exists = os.path.exists(expanded_path)
+            f.write(f"{i}. {expanded_path}: {'✓ EXISTS' if exists else '✗ not found'}\n")
+
+    # Also print to stdout
+    print(f"[DEBUG] Script location: {os.path.abspath(__file__)}")
+    print(f"[DEBUG] Current working directory: {os.getcwd()}")
+    print(f"[DEBUG] Checking config paths...")
+
+    config_path = None
+    for path in possible_paths:
+        expanded_path = os.path.expanduser(path)
+        if os.path.exists(expanded_path):
+            print(f"[DEBUG] Found config.ini at: {expanded_path}")
+            config_path = expanded_path
+            break
+
+    if not config_path:
         print("config.ini not found")
         print("   Create config.ini with:")
         print("   [gmail]")
         print("   email = your.email@gmail.com")
         print("   app_password = your16charpassword")
+        print(f"   Searched paths: {possible_paths}")
         return None, None
 
-    config.read('config.ini')
+    config.read(config_path)
     try:
         gmail_user = config.get('gmail', 'email')
         app_password = config.get('gmail', 'app_password')
+        print(f"[DEBUG] Loaded config from: {config_path}")
         return gmail_user, app_password
-    except:
-        print("Invalid config.ini format")
+    except Exception as e:
+        print(f"Invalid config.ini format: {e}")
         return None, None
 
 def extract_cascade_signals(subject, body, author, folder):
@@ -263,6 +331,133 @@ def extract_cascade_signals(subject, body, author, folder):
 
     return signals, findings
 
+def generate_gmail_report(all_signals, all_findings, signal_count, finding_count, messages_analyzed):
+    """
+    Generate structured report of Gmail analysis and dashboard integration
+    Shows: signals extracted, findings identified, sources, integration status
+    """
+    print("\n" + "="*60)
+    print("INTEGRATION REPORT: Gmail Message Analysis")
+    print("="*60 + "\n")
+
+    if signal_count == 0 and finding_count == 0:
+        print("[INFO] No new signals or findings extracted from emails")
+        return
+
+    # ============================================
+    # SECTION 1: MESSAGES ANALYZED
+    # ============================================
+    print("[MESSAGES ANALYZED]")
+    print(f"Total messages processed: {messages_analyzed}\n")
+
+    # Group by author/source
+    sources = {}
+    for signal in all_signals:
+        source = signal['source']
+        if source not in sources:
+            sources[source] = 0
+        sources[source] += 1
+
+    for source, count in sorted(sources.items(), key=lambda x: x[1], reverse=True):
+        print(f"   • {source}: {count} signals")
+
+    # ============================================
+    # SECTION 2: SIGNALS INTEGRATED
+    # ============================================
+    print("\n[SIGNALS INTEGRATED]")
+    print(f"Total signals added: {signal_count}\n")
+
+    # Group signals by node
+    signals_by_node = {}
+    for signal in all_signals:
+        node_id = signal['node']
+        if node_id not in signals_by_node:
+            signals_by_node[node_id] = []
+        signals_by_node[node_id].append(signal)
+
+    node_names = {
+        0: "Cascade Entry Point / Unclassified",
+        3: "Institutional Suppression",
+        6: "Measurement Capacity Erosion",
+        7: "Economic Depletion",
+        11: "Infrastructure Built for Still Climate",
+        12: "Adaptation Exhaustion / Geographic Bifurcation"
+    }
+
+    for node_id in sorted(signals_by_node.keys()):
+        node_signals = signals_by_node[node_id]
+        node_name = node_names.get(node_id, f"Node {node_id}")
+        print(f"   Node {node_id} ({node_name}): {len(node_signals)} signals")
+
+        for sig in node_signals:
+            severity_badge = "🔴 CRITICAL" if sig['severity'] == 'critical' else \
+                           "🟠 SERIOUS" if sig['severity'] == 'serious' else \
+                           "🟡 WARNING" if sig['severity'] == 'warning' else "ℹ️  INFO"
+            print(f"      {severity_badge}")
+            print(f"      From: {sig['source'][:60]}")
+            print(f"      Topic: {sig['domain'][:70]}")
+            print()
+
+    # ============================================
+    # SECTION 3: FINDINGS INTEGRATED
+    # ============================================
+    print("[FINDINGS INTEGRATED]")
+    print(f"Total findings added: {finding_count}\n")
+
+    for i, finding in enumerate(all_findings, 1):
+        confidence_pct = int(finding['confidence'] * 100)
+        print(f"   Finding {i}: {finding['mechanism']}")
+        print(f"      Confidence: {confidence_pct}%")
+        print(f"      Evidence: {finding['evidence']}")
+        print(f"      Summary: {finding['text'][:90]}...")
+        print()
+
+    # ============================================
+    # SECTION 4: DASHBOARD INTEGRATION STATUS
+    # ============================================
+    print("[DASHBOARD INTEGRATION]")
+    print("   ✓ Signals extracted from email content")
+    print("   ✓ Signals mapped to cascade nodes")
+    print("   ✓ Findings added to Research Findings tab")
+    print("   ✓ Goal-driven signal extraction applied")
+    print("   ✓ Author/source attribution tracked")
+    print("   ✓ Message deduplication enabled")
+    print()
+
+    # ============================================
+    # SECTION 5: DATA QUALITY METRICS
+    # ============================================
+    print("[DATA QUALITY METRICS]")
+    print(f"   • Messages analyzed: {messages_analyzed}")
+    print(f"   • Signals extracted: {signal_count}")
+    print(f"   • Findings generated: {finding_count}")
+    print(f"   • Cascade node coverage: {len(signals_by_node)} nodes represented")
+    print(f"   • Source diversity: {len(sources)} unique email sources")
+    print(f"   • Message deduplication: Enabled (prevents re-analysis)")
+    print()
+
+    # ============================================
+    # SECTION 6: NEXT ACTIONS FOR DASHBOARD
+    # ============================================
+    print("[DASHBOARD NEXT STEPS]")
+    print("   1. View new signals in 'Granularity' tab → All Signals (Detailed View)")
+    print("   2. Filter by 'source' to see email-derived signals")
+    print("   3. Review findings in 'Research Findings' tab → Latest Entries")
+    print("   4. Check cascade node activation in 'System Mechanism Tracker'")
+    print("   5. Monitor email contributor impact in 'Today's Progress'")
+    print()
+
+    # ============================================
+    # SECTION 7: PERSISTENCE & ARCHIVAL
+    # ============================================
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print("[ARCHIVAL]")
+    print(f"   Timestamp: {timestamp}")
+    print(f"   Database: Cascade_DB updated with {signal_count} signals, {finding_count} findings")
+    print(f"   Deduplication: Message IDs tracked to prevent re-analysis")
+    print(f"   Status: ✓ COMMITTED TO DATABASE")
+    print()
+
 def main():
     print("\n" + "="*60)
     print("Analyzing All Gmail Messages")
@@ -286,6 +481,8 @@ def main():
 
     signal_count = 0
     finding_count = 0
+    all_signals = []
+    all_findings = []
 
     for msg in messages_data:
         try:
@@ -298,6 +495,7 @@ def main():
                     add_signal(signal['node'], signal['domain'], signal['description'],
                               signal['severity'], signal['date'], signal['source'])
                     print(f"   [OK] Signal from {msg['author']}: {signal['domain']}")
+                    all_signals.append(signal)
                     signal_count += 1
                 except Exception as e:
                     print(f"   [WARNING] Error adding signal: {e}")
@@ -307,13 +505,14 @@ def main():
                     add_finding(finding['mechanism'], finding['text'],
                                finding['confidence'], finding['evidence'])
                     print(f"   [OK] Finding: {finding['mechanism']}")
+                    all_findings.append(finding)
                     finding_count += 1
                 except Exception as e:
                     print(f"   [WARNING] Error adding finding: {e}")
 
             # Mark as analyzed
             mark_message_analyzed(msg['message_id'], msg['folder'], msg['author'],
-                                 msg['subject'], msg['date'], len(signals), len(findings))
+                                 msg['subject'])
 
         except Exception as e:
             print(f"   [WARNING] Error processing message from {msg['author']}: {e}")
@@ -323,6 +522,9 @@ def main():
     print(f"   - Signals added: {signal_count}")
     print(f"   - Findings added: {finding_count}")
     print(f"   - Messages analyzed: {len(messages_data)}")
+
+    # Generate comprehensive integration report
+    generate_gmail_report(all_signals, all_findings, signal_count, finding_count, len(messages_data))
 
 if __name__ == '__main__':
     main()

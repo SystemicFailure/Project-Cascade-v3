@@ -4,6 +4,9 @@ Project Cascade Standalone Application
 Streamlit-based dashboard with 8 primary sections
 """
 
+# VERSION CHECK: 2026-08-20 18:35 UTC
+_APP_VERSION = "2026-08-20_18:35_UTC"
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -11,6 +14,7 @@ import plotly.express as px
 from datetime import datetime, timedelta
 import subprocess
 import os
+import sys
 from cascade_db import (
     get_all_nodes, get_all_signals, get_cascade_sequences,
     get_reference_points, get_baseline_failures, get_metrics_summary,
@@ -24,81 +28,6 @@ from cascade_db import (
     get_all_findings, get_findings_by_mechanism, add_finding, get_mechanisms_list, get_findings_summary
 )
 import json
-
-# ============================================
-# Load Configuration (Account Switching)
-# ============================================
-def load_cascade_config():
-    """Load configuration from cascade_config.json for account switching"""
-    config_path = os.path.join(os.path.dirname(__file__), 'cascade_config.json')
-    try:
-        with open(config_path, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        st.error(f"⚠️ Could not load cascade_config.json: {e}")
-        return None
-
-# Load config at startup
-CASCADE_CONFIG = load_cascade_config()
-ACTIVE_ACCOUNT = CASCADE_CONFIG.get('mcp_authentication', {}).get('account_email', 'unknown') if CASCADE_CONFIG else 'unknown'
-FALLBACK_ACCOUNT = CASCADE_CONFIG.get('google_account', {}).get('fallback_account', 'unknown') if CASCADE_CONFIG else 'unknown'
-
-# ============================================
-# Initialize Project Goals (Session 7)
-# ============================================
-@st.cache_resource
-def initialize_project_goals():
-    """
-    Initialize project goals at app startup.
-    Adds the 6 new goals from Session 7 if they don't already exist.
-    This function runs only once per app restart due to @st.cache_resource.
-    """
-    try:
-        # Check current goals
-        existing_goals = get_all_goals() or []
-        existing_count = len(existing_goals)
-
-        # Only add goals if we have fewer than 7 (1 existing + 6 new)
-        if existing_count < 7:
-            new_goals = [
-                {
-                    "text": "Detect cascading system failures across global critical infrastructure before collapse becomes inevitable through autonomous multi-source monitoring",
-                    "category": "primary"
-                },
-                {
-                    "text": "Daily monitoring of critical infrastructure developments globally (food, commodities, ports, water, energy, geopolitics) with cascade implications",
-                    "category": "primary"
-                },
-                {
-                    "text": "Establish and maintain 4-routine autonomous data pipeline: news headlines, researcher perspectives, real-time infrastructure monitoring, institutional synthesis",
-                    "category": "supporting"
-                },
-                {
-                    "text": "Document all automated routines, data sources, and system architecture for transparency and cross-session continuity",
-                    "category": "supporting"
-                },
-                {
-                    "text": "Identify bifurcation points—moments when systems cross from recoverable stress to permanent failure—enabling early intervention",
-                    "category": "supporting"
-                },
-                {
-                    "text": "Map geographic bifurcation: track which regions survive infrastructure cascades vs. collapse based on self-sufficiency and dependencies",
-                    "category": "supporting"
-                }
-            ]
-
-            for goal_data in new_goals:
-                try:
-                    add_goal(
-                        goal_text=goal_data["text"],
-                        category=goal_data["category"]
-                    )
-                except Exception as e:
-                    pass  # Silently skip duplicates or errors
-
-        return True
-    except Exception as e:
-        return False
 
 # Page config
 st.set_page_config(
@@ -160,13 +89,6 @@ def metric_card(label, value, trend=None, color="#3987e5"):
 def section_summary():
     st.header("Planetary Degradation Monitor")
 
-    # Initialize variables BEFORE try blocks to avoid UnboundLocalError
-    metrics = {}
-    nodes_by_activity = []
-    cascades_with_signals = []
-    hotspots = []
-    reference_points = []
-
     try:
         # Get all data with safe handling
         metrics = get_metrics_summary() or {}
@@ -176,20 +98,18 @@ def section_summary():
         reference_points = get_all_reference_points_latest() or []
 
         # Executive Summary Metrics (Top Row)
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
             st.metric("Total Signals", metrics.get('total_signals', 0))
         with col2:
-            st.metric("Total Findings", metrics.get('total_findings', 0))
-        with col3:
             active_count = len([n for n in nodes_by_activity if n.get('signal_count') and n['signal_count'] > 0])
             st.metric("Active Nodes", active_count)
-        with col4:
+        with col3:
             st.metric("CASCADE Sequences", metrics.get('cascade_sequences', 0))
-        with col5:
+        with col4:
             st.metric("Geographic Hotspots", len(hotspots))
-        with col6:
+        with col5:
             robustness = next((rp.get('value', 0) for rp in reference_points if rp and 'Robustness' in rp.get('metric_name', '')), 0)
             st.metric("System Robustness", f"{robustness:.0f}%")
 
@@ -239,8 +159,8 @@ def section_summary():
     st.divider()
 
     # Section 1: Top Activated Nodes (Ranked by Signal Count & Severity)
-    st.subheader("Cascade Mechanisms Under Activation")
-    st.caption("Ranked by signal frequency — system vulnerabilities with real-world evidence")
+    st.subheader("Top Activated Cascade Nodes")
+    st.caption("Ranked by signal frequency and severity — nodes with greatest real-world activation")
 
     active_nodes = [n for n in nodes_by_activity if n['signal_count'] and n['signal_count'] > 0]
     if active_nodes:
@@ -249,19 +169,14 @@ def section_summary():
             node_display.append({
                 'Node': f"Node {node['node_id']}",
                 'Mechanism': node['name'],
-                'Signals': node['signal_count'] or 0
+                'Signals': node['signal_count'] or 0,
+                'Severity': node['severity_score'] or 0,
+                'Amplitude': f"{node['amplitude']:.1f}" if node['amplitude'] else "—",
+                'Frequency': f"{node['frequency']:.1f}" if node['frequency'] else "—"
             })
 
         node_df = pd.DataFrame(node_display)
-
-        # Configure columns for width
-        col_config = {
-            'Node': st.column_config.TextColumn(width='small'),
-            'Mechanism': st.column_config.TextColumn(width='medium'),
-            'Signals': st.column_config.NumberColumn(width='small')
-        }
-
-        st.dataframe(node_df, column_config=col_config, hide_index=True, use_container_width=True)
+        st.dataframe(node_df, width='stretch', hide_index=True)
     else:
         st.info("No active nodes currently being tracked")
 
@@ -272,29 +187,13 @@ def section_summary():
     st.caption("CASCADE pathways showing real-world activation — documented causal chains")
 
     if cascades_with_signals:
-        # Get all nodes for description building
-        all_nodes = get_all_nodes() or []
-        node_map = {node['node_id']: node['name'] for node in all_nodes}
-
         cascade_display = []
         for cs in cascades_with_signals[:10]:
-            # Build cascade description from node sequence
-            cascade_desc = cs.get('description') if cs.get('description') else None
-
-            if not cascade_desc and cs.get('node_sequence'):
-                try:
-                    # Parse node sequence "10->3" into node names
-                    node_ids = cs['node_sequence'].split('->')
-                    node_names = [node_map.get(int(nid.strip()), f"Node {nid}") for nid in node_ids]
-                    cascade_desc = ' → '.join(node_names)
-                except:
-                    cascade_desc = cs['node_sequence']
-
             cascade_display.append({
-                'CASCADE #': f"CASCADE {cs['cascade_id']}",
-                'Mechanism': cascade_desc or "—",
+                'ID': f"CASCADE {cs['cascade_id']}",
                 'Node Chain': cs['node_sequence'],
-                'Real-World Signals': cs['signal_count'] or 0
+                'Real-World Signals': cs['signal_count'] or 0,
+                'Confidence': f"{cs['confidence']:.0%}" if cs['confidence'] else "—"
             })
 
         cascade_df = pd.DataFrame(cascade_display)
@@ -390,30 +289,6 @@ def section_today_progress():
     today_str = datetime.now().strftime('%Y-%m-%d')
 
     # ============================================
-    # SECTION 0: TODAY'S SIGNIFICANT FINDINGS
-    # ============================================
-    st.subheader("Today's Significant Findings")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("Gmail Analysis", "8/30 emails matched goals", delta="26.7%")
-
-    with col2:
-        st.metric("New Signals Extracted", "16 from researcher network")
-
-    with col3:
-        st.metric("New Goal Added", "Email analyst monitoring (goal 7)")
-
-    st.markdown("""
-    **Research Integration Complete:** James Hansen Super-Duper El Niño research (April 15, 2026) integrated into cascade database. 8 new signals and 6 new findings added across Nodes 0, 1, 3, 4, 11. Key insight: Super El Niño + warming synergy may accelerate bifurcation timeline by 12-18 months.
-
-    **System Status:** 180 total signals, 60 research findings, 7 project goals operationalized. Cascade now tracks measurement system superiority (upper 300m ocean heat vs. Nino3.4), Kelvin wave predictability, and bifurcation amplification via Super El Niño mechanism.
-    """)
-
-    st.divider()
-
-    # ============================================
     # SECTION 1: AUTO-GENERATED SYNTHESIS FROM ROUTINES
     # ============================================
     st.subheader("Auto-Synthesized from 4 Daily Routines")
@@ -479,7 +354,76 @@ def section_today_progress():
     st.divider()
 
     # ============================================
-    # TODAY'S DAILY FINDINGS SUMMARY
+    # SECTION 2: MANUAL CAPTURE FROM CHAT/SESSIONS
+    # ============================================
+    st.subheader("Add Finding from This Session")
+    st.caption("Capture theoretical advances, methodological insights, or key realizations from your work")
+
+    with st.expander("Quick Capture Form", expanded=False):
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            new_finding = st.text_area(
+                "Theoretical Advance or Key Finding",
+                placeholder="E.g., Goal-driven architecture eliminates keyword brittleness and auto-adapts to scope changes",
+                height=80,
+                key="new_finding"
+            )
+
+        with col2:
+            finding_type = st.selectbox(
+                "Type",
+                ["Theoretical Advance", "Methodological Insight", "System Discovery"],
+                key="finding_type"
+            )
+
+        new_insight = st.text_area(
+            "Methodological Insight (optional)",
+            placeholder="E.g., Four-routine pipeline ensures multi-source convergence before signal elevation",
+            height=60,
+            key="new_insight"
+        )
+
+        if st.button("Save Finding", type="primary"):
+            if new_finding.strip():
+                # Load existing daily findings
+                findings_data = get_daily_findings(today_str)
+
+                if findings_data:
+                    # Update existing entry
+                    existing_advances = json.loads(findings_data['theoretical_advances'] or '[]')
+                    existing_insights = json.loads(findings_data['methodological_insights'] or '[]')
+                    existing_findings = json.loads(findings_data['findings'] or '[]')
+                else:
+                    existing_advances = []
+                    existing_insights = []
+                    existing_findings = []
+
+                # Add new entries
+                existing_advances.append(f"[{finding_type}] {new_finding}")
+                if new_insight.strip():
+                    existing_insights.append(new_insight)
+
+                # Save to database
+                from cascade_db import add_or_update_daily_findings
+                overview = f"Today's synthesis: {len(todays_signals)} signals, {len(todays_findings)} findings, {len(existing_advances)} manual advances"
+                add_or_update_daily_findings(
+                    today_str,
+                    overview,
+                    json.dumps(existing_findings),
+                    json.dumps(existing_insights),
+                    json.dumps(existing_advances)
+                )
+
+                st.success("Finding saved! Reloading...")
+                st.rerun()
+            else:
+                st.error("Please enter a finding")
+
+    st.divider()
+
+    # ============================================
+    # SECTION 3: TODAY'S DAILY FINDINGS SUMMARY
     # ============================================
     findings_data = get_daily_findings(today_str)
 
@@ -918,7 +862,7 @@ def section_system_mechanism_tracker():
     # KEY METRICS ROW
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total Signals", metrics['total_signals'], "+22 since Aug 17")
+        st.metric("Total Signals", metrics['total_signals'], "+20 since Aug 17")
     with col2:
         active_count = len([n for n in nodes_by_activity if n['status'] == 'active'])
         st.metric("Active Mechanisms", f"{active_count}/13", "Nodes 3,4,5,6,7,11,13")
@@ -1169,7 +1113,7 @@ def section_project_goals():
     st.divider()
 
     # Tabs for different views
-    tab1, tab2, tab3 = st.tabs(["Active Goals", "Retired Goals", "Add New Goal"])
+    tab1, tab2 = st.tabs(["Active Goals", "Retired Goals"])
 
     all_goals = get_all_goals()
     active_goals = [g for g in all_goals if g['status'] == 'active']
@@ -1180,28 +1124,35 @@ def section_project_goals():
         st.subheader(f"Active Goals ({len(active_goals)})")
 
         if active_goals:
-            for idx, goal in enumerate(active_goals):
-                col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
+            for idx, goal in enumerate(active_goals, 1):
+                with st.container(border=True):
+                    col_title, col_actions = st.columns([0.85, 0.15])
 
-                with col1:
-                    st.markdown(f"""
-                    <div style='background: #252423; border-left: 4px solid #199e70; border-radius: 6px; padding: 16px; margin: 8px 0;'>
-                        <div style='font-size: 14px; color: #ffffff;'>{goal['goal_text']}</div>
-                        <div style='font-size: 11px; color: #8a8984; margin-top: 8px;'>
-                            Created: {goal['created_date'][:10]} | Category: {goal['category']}
-                        </div>
-                        {f"<div style='font-size: 11px; color: #c3c2b7; margin-top: 4px;'>Last amended: {goal['amended_date'][:10]}</div>" if goal['amended_date'] else ""}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    with col_title:
+                        st.markdown(f"**{idx}. {goal['goal_text']}**")
 
-                with col2:
-                    if st.button("", key=f"edit_{goal['goal_id']}", help="Edit goal"):
-                        st.session_state.edit_goal_id = goal['goal_id']
+                        meta_col1, meta_col2 = st.columns(2)
+                        with meta_col1:
+                            st.caption(f"📁 Category: `{goal['category']}`")
+                        with meta_col2:
+                            st.caption(f"📅 Created: {goal['created_date'][:10]}")
 
-                with col3:
-                    if st.button("", key=f"retire_{goal['goal_id']}", help="Retire goal"):
-                        retire_goal(goal['goal_id'], notes=f"Retired on {datetime.now().strftime('%Y-%m-%d')}")
-                        st.rerun()
+                        if goal['amended_date']:
+                            st.caption(f"✏️ Last amended: {goal['amended_date'][:10]}")
+
+                    with col_actions:
+                        st.markdown("")  # spacing
+                        col_edit, col_retire = st.columns(2, gap="small")
+
+                        with col_edit:
+                            if st.button("✏️ Edit", key=f"edit_{goal['goal_id']}", use_container_width=True):
+                                st.session_state.edit_goal_id = goal['goal_id']
+                                st.rerun()
+
+                        with col_retire:
+                            if st.button("🗑️ Retire", key=f"retire_{goal['goal_id']}", use_container_width=True):
+                                retire_goal(goal['goal_id'], notes=f"Retired on {datetime.now().strftime('%Y-%m-%d')}")
+                                st.rerun()
 
             # Edit mode
             if 'edit_goal_id' in st.session_state:
@@ -1238,57 +1189,34 @@ def section_project_goals():
                             del st.session_state.edit_goal_id
                             st.rerun()
         else:
-            st.info("No active goals yet. Add one using the 'Add New Goal' tab.")
+            st.info("No active goals currently tracked.")
 
     # TAB 2: RETIRED GOALS
     with tab2:
         st.subheader(f"Retired Goals ({len(retired_goals)})")
 
         if retired_goals:
-            for goal in retired_goals:
-                col1, col2 = st.columns([0.9, 0.1])
+            for idx, goal in enumerate(retired_goals, 1):
+                with st.container(border=True):
+                    col_title, col_actions = st.columns([0.85, 0.15])
 
-                with col1:
-                    st.markdown(f"""
-                    <div style='background: #252423; border-left: 4px solid #8a8984; border-radius: 6px; padding: 16px; margin: 8px 0; opacity: 0.7;'>
-                        <div style='font-size: 14px; color: #c3c2b7;'>{goal['goal_text']}</div>
-                        <div style='font-size: 11px; color: #8a8984; margin-top: 8px;'>
-                            Retired: {goal['retired_date'][:10]} | {goal['notes']}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    with col_title:
+                        st.markdown(f"~~**{idx}. {goal['goal_text']}**~~")
 
-                with col2:
-                    if st.button("", key=f"reactivate_{goal['goal_id']}", help="Reactivate goal"):
-                        activate_goal(goal['goal_id'])
-                        st.success("Goal reactivated!")
-                        st.rerun()
+                        meta_col1, meta_col2 = st.columns(2)
+                        with meta_col1:
+                            st.caption(f"🚫 Retired: {goal['retired_date'][:10]}")
+                        with meta_col2:
+                            st.caption(f"📝 {goal['notes']}")
+
+                    with col_actions:
+                        st.markdown("")  # spacing
+                        if st.button("♻️ Reactivate", key=f"reactivate_{goal['goal_id']}", use_container_width=True):
+                            activate_goal(goal['goal_id'])
+                            st.success("Goal reactivated!")
+                            st.rerun()
         else:
             st.info("No retired goals.")
-
-    # TAB 3: ADD NEW GOAL
-    with tab3:
-        st.subheader("Add New Goal")
-
-        new_goal_text = st.text_area(
-            "Goal Description",
-            placeholder="Enter a new project goal...",
-            height=100
-        )
-
-        new_category = st.selectbox(
-            "Category",
-            ["primary", "secondary", "supporting", "monitoring"],
-            key="new_goal_category"
-        )
-
-        if st.button("Add Goal", type="primary"):
-            if new_goal_text.strip():
-                add_goal(new_goal_text, new_category)
-                st.success("Goal added successfully!")
-                st.rerun()
-            else:
-                st.error("Please enter a goal description.")
 
     st.divider()
 
@@ -2344,11 +2272,6 @@ def section_global_infrastructure_watch():
 # CONTINUE: RESEARCH FINDINGS DETAILS
 # ============================================
 
-    # Retrieve all findings from database
-    all_findings = get_all_findings()
-    today_str = datetime.today().isoformat()
-    project_findings = [f for f in all_findings if f['date_discovered'] != today_str]
-
     mechanisms = list(set([f['mechanism'] for f in project_findings])) if project_findings else []
     mechanisms.sort()
 
@@ -2794,7 +2717,13 @@ def section_bifurcation_point():
 def execute_routine(script_name, routine_name):
     """Execute a routine script and display output"""
     try:
-        script_path = os.path.join(os.getcwd(), script_name)
+        # Try to find script in cascade_updates directory first
+        cascade_updates_dir = '/home/claude/cascade_updates'
+        script_path = os.path.join(cascade_updates_dir, script_name)
+
+        # If not found, try current working directory
+        if not os.path.exists(script_path):
+            script_path = os.path.join(os.getcwd(), script_name)
 
         if not os.path.exists(script_path):
             st.error(f"Script not found: {script_path}")
@@ -2802,21 +2731,61 @@ def execute_routine(script_name, routine_name):
 
         st.info(f"Executing {routine_name}...")
 
+        # Write debug info to log
+        debug_log = os.path.join(cascade_updates_dir, 'routine_debug.log')
+        with open(debug_log, 'a') as f:
+            f.write(f"\n{'='*60}\n")
+            f.write(f"Executing {routine_name} at {datetime.now()}\n")
+            f.write(f"Script path: {script_path}\n")
+            f.write(f"CWD: {cascade_updates_dir}\n")
+            f.write(f"Script exists: {os.path.exists(script_path)}\n")
+
+        # Execute from cascade_updates directory to ensure config.ini is found
+        # Use sys.executable to get the current Python interpreter path
         result = subprocess.run(
-            ["python", script_path],
+            [sys.executable, script_path],
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=120,
+            cwd=cascade_updates_dir,
+            env=os.environ.copy()  # Pass full environment to subprocess
         )
+
+        # Write result to log
+        with open(debug_log, 'a') as f:
+            f.write(f"Return code: {result.returncode}\n")
+            f.write(f"STDOUT:\n{result.stdout}\n")
+            f.write(f"STDERR:\n{result.stderr}\n")
 
         if result.returncode == 0:
             st.success(f"{routine_name} completed successfully")
-            with st.expander("Show execution output"):
-                st.code(result.stdout, language="text")
+
+            # Extract and display the INTEGRATION REPORT section prominently
+            output = result.stdout
+            if "INTEGRATION REPORT" in output:
+                # Split output at the report section
+                parts = output.split("INTEGRATION REPORT")
+                report_section = "INTEGRATION REPORT" + parts[1] if len(parts) > 1 else ""
+
+                # Display report in a formatted code block
+                st.subheader("📊 Integration Report")
+                st.code(report_section, language="text")
+
+            # Show full execution output in expander for reference
+            with st.expander("📋 Full Execution Output"):
+                st.code(output, language="text")
         else:
-            st.error(f"{routine_name} completed with errors")
-            with st.expander("Show error output"):
-                st.code(result.stderr, language="text")
+            st.error(f"{routine_name} completed with errors (return code: {result.returncode})")
+
+            # Show stdout (where most output goes)
+            if result.stdout.strip():
+                st.subheader("📊 Output")
+                st.code(result.stdout, language="text")
+
+            # Show stderr if there are errors
+            if result.stderr.strip():
+                with st.expander("Error Details"):
+                    st.code(result.stderr, language="text")
 
     except subprocess.TimeoutExpired:
         st.error(f"{routine_name} timed out (exceeded 120 seconds)")
@@ -2832,7 +2801,7 @@ def section_routines():
 
     # Routine 0: Hourly News Headline Scan (first in sequence)
     st.write("### [NEWS] Routine 0: Hourly News Headline Scan")
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.write("**Early Warning Monitoring**")
     with col2:
@@ -2872,7 +2841,7 @@ def section_routines():
 
     # Routine 1: Hourly Gmail Message Analysis
     st.write("### [EMAIL] Routine 1: Hourly Gmail Message Analysis")
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.write("**Analyze All Emails**")
     with col2:
@@ -2906,7 +2875,15 @@ def section_routines():
     col1, col2, col3 = st.columns([3, 1, 1])
     with col2:
         if st.button("Run Now", key="run_routine_1"):
-            execute_routine("import_substack_imap.py", "Gmail Message Analysis")
+            # Import and run directly instead of subprocess
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("import_substack_imap", "/home/claude/cascade_updates/import_substack_imap.py")
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                st.success("Gmail Message Analysis completed successfully")
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
     with col3:
         st.write("")
 
@@ -2914,7 +2891,7 @@ def section_routines():
 
     # Routine 2: Daily Institutional Data Import
     st.write("### [INSTITUTION] Routine 2: Daily Institutional Research Data Synthesis")
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.write("**Institutional APIs**")
     with col2:
@@ -2960,7 +2937,7 @@ def section_routines():
 
     # Routine 3: Daily Critical Infrastructure Monitoring
     st.write("### [WORLD] Routine 3: Daily Critical Infrastructure Monitoring")
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.write("**Global Infrastructure Data**")
     with col2:
@@ -3246,9 +3223,6 @@ def section_routines():
 # MAIN APP
 # ============================================
 def main():
-    # Initialize project goals on app startup
-    initialize_project_goals()
-
     # Sidebar navigation
     with st.sidebar:
         st.title("Project Cascade")
