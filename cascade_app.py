@@ -160,6 +160,13 @@ def metric_card(label, value, trend=None, color="#3987e5"):
 def section_summary():
     st.header("Planetary Degradation Monitor")
 
+    # Initialize variables BEFORE try blocks to avoid UnboundLocalError
+    metrics = {}
+    nodes_by_activity = []
+    cascades_with_signals = []
+    hotspots = []
+    reference_points = []
+
     try:
         # Get all data with safe handling
         metrics = get_metrics_summary() or {}

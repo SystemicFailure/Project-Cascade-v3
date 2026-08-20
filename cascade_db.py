@@ -785,6 +785,14 @@ def get_analyzed_messages_count():
     conn.close()
     return count
 
+# Initialize database on import (critical for Streamlit Cloud)
+# This ensures tables exist even when imported as a module
+try:
+    init_db()
+except Exception as e:
+    print(f"Warning: Database initialization encountered an error: {e}")
+    pass
+
 if __name__ == '__main__':
     init_db()
     print(f"Database initialized at {DB_PATH}")
