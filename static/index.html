@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Project Cascade</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #0d0d0d; color: #fff; line-height: 1.6; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        h1 { color: #ff1493; margin-bottom: 10px; }
+        h2 { color: #3987e5; margin: 30px 0 20px 0; }
+        h3 { color: #c3c2b7; margin: 15px 0 10px 0; }
+        .section { background: #1a1a19; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #3987e5; }
+        input { width: 100%; padding: 10px; margin-bottom: 10px; background: #0d0d0d; color: #fff; border: 1px solid #333; border-radius: 4px; }
+        input:focus { outline: none; border-color: #3987e5; box-shadow: 0 0 5px rgba(57, 135, 229, 0.3); }
+        button { padding: 10px 20px; background: #3987e5; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #2966b8; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        .card { background: #0d0d0d; padding: 12px; margin: 10px 0; border-radius: 4px; border-left: 3px solid #3987e5; }
+        .card-title { font-weight: bold; color: #fff; margin-bottom: 5px; }
+        .card-meta { font-size: 0.9em; color: #c3c2b7; }
+        .severity { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.8em; font-weight: bold; margin-right: 5px; }
+        .severity.critical { background: #8b0000; color: #ff6b6b; }
+        .severity.warning { background: #664400; color: #ffa500; }
+        .confidence { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.8em; background: #003300; color: #7cfc00; }
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 15px 0; }
+        .metric { background: #0d0d0d; padding: 15px; border-radius: 4px; text-align: center; border-left: 4px solid #3987e5; }
+        .metric-value { font-size: 2em; font-weight: bold; color: #3987e5; }
+        .metric-label { font-size: 0.9em; color: #c3c2b7; margin-top: 5px; }
+        .alignment-bar { background: #0d0d0d; height: 30px; border-radius: 4px; overflow: hidden; margin: 10px 0; }
+        .alignment-fill { height: 100%; background: linear-gradient(90deg, #ff6b6b, #ffa500, #7cfc00); display: flex; align-items: center; justify-content: center; color: #000; font-weight: bold; font-size: 0.9em; }
+        .no-data { color: #c3c2b7; font-style: italic; text-align: center; padding: 20px; }
+        .status { padding: 10px; border-radius: 4px; margin-top: 10px; display: none; }
+        .status.loading { background: #333; color: #fff; display: block; }
+        .status.success { background: #1a3a1a; color: #7cfc00; display: block; }
+        .status.error { background: #3a1a1a; color: #ff6b6b; display: block; }
+        .bifurcation { background: #3a1a1a; padding: 15px; border-radius: 4px; border-left: 4px solid #ff6b6b; margin: 15px 0; }
+        .bifurcation strong { color: #ff6b6b; }
+        .bifurcation ul { margin-left: 20px; margin-top: 10px; }
+        .bifurcation li { margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌍 Project Cascade</h1>
+        <p>Planetary Degradation Monitor & Cascade Analysis System</p>
+
+        <div class="section">
+            <h2>📋 Run Analysis</h2>
+            <input type="text" id="cmd" placeholder="p: https://example.com or p: topic">
+            <button onclick="analyze()" id="analyzeBtn">Analyze</button>
+            <div class="status" id="status"></div>
+        </div>
+
+        <div id="results" style="display:none;">
+            <div class="section">
+                <h2>✅ Analysis Results</h2>
+
+                <h3>Metrics</h3>
+                <div id="metrics" class="metrics"></div>
+
+                <h3>Goal Alignment</h3>
+                <div id="alignment"></div>
+
+                <h3>📊 Signals Extracted</h3>
+                <div id="signals"></div>
+
+                <h3>📈 Findings Synthesized</h3>
+                <div id="findings"></div>
+
+                <h3>⚠️ Bifurcation Assessment</h3>
+                <div id="bifurcation"></div>
+
+                <h3>🎯 Mission Impact</h3>
+                <div id="impact"></div>
+            </div>
+        </div>
+
+        <h2>📊 Recent Activity</h2>
+        <div class="section">
+            <h3>Recent Signals</h3>
+            <div id="recentSignals"></div>
+            <h3 style="margin-top: 20px;">Recent Findings</h3>
+            <div id="recentFindings"></div>
+        </div>
+    </div>
+
+    <script>
+        async function analyze() {
+            const cmd = document.getElementById('cmd').value.trim();
+            const statusDiv = document.getElementById('status');
+            const btn = document.getElementById('analyzeBtn');
+
+            if (!cmd) {
+                statusDiv.textContent = '⚠️ Please enter a URL or topic';
+                statusDiv.className = 'status error';
+                return;
+            }
+
+            statusDiv.textContent = '⏳ Running cascade analysis...';
+            statusDiv.className = 'status loading';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/analysis/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url_or_topic: cmd})
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.detail || 'Analysis failed');
+                }
+
+                const signals_added = data.persistence?.signals_added || 0;
+                const findings_added = data.persistence?.findings_added || 0;
+                statusDiv.textContent = `✅ Analysis complete: ${signals_added} signals, ${findings_added} findings saved`;
+                statusDiv.className = 'status success';
+
+                displayResults(data.analysis);
+                loadRecent();
+            } catch(e) {
+                statusDiv.textContent = '❌ Error: ' + e.message;
+                statusDiv.className = 'status error';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function displayResults(analysis) {
+            if (!analysis || !analysis.success) return;
+
+            // Metrics
+            const metricsDiv = document.getElementById('metrics');
+            metricsDiv.innerHTML = `
+                <div class="metric">
+                    <div class="metric-value">${(analysis.overall_alignment || 0).toFixed(1)}%</div>
+                    <div class="metric-label">Overall Alignment</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">${(analysis.signals || []).length}</div>
+                    <div class="metric-label">Signals</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">${(analysis.findings || []).length}</div>
+                    <div class="metric-label">Findings</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">${analysis.mission_impact?.goals_served?.length || 0}/7</div>
+                    <div class="metric-label">Goals Served</div>
+                </div>
+            `;
+
+            // Alignment bar
+            const alignment = analysis.overall_alignment || 0;
+            document.getElementById('alignment').innerHTML = `
+                <div class="alignment-bar">
+                    <div class="alignment-fill" style="width: ${alignment}%">${alignment.toFixed(1)}%</div>
+                </div>
+                <p>${alignment >= 75 ? '✅ Meets 75% threshold' : '⚠️ Below 75% threshold'}</p>
+            `;
+
+            // Signals
+            const signalsDiv = document.getElementById('signals');
+            const signals = analysis.signals || [];
+            if (signals.length > 0) {
+                signalsDiv.innerHTML = signals.map(sig => `
+                    <div class="card">
+                        <div class="card-title">${sig.mechanism || 'Signal'}</div>
+                        <div class="card-meta">
+                            <span class="severity ${(sig.severity || 'warning').toLowerCase()}">${(sig.severity || 'UNKNOWN').toUpperCase()}</span>
+                            ${sig.confidence || 0}% confidence | Node ${sig.node_id || 'N/A'}
+                            <br>${sig.description || 'No description'}
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                signalsDiv.innerHTML = '<div class="no-data">No signals extracted</div>';
+            }
+
+            // Findings
+            const findingsDiv = document.getElementById('findings');
+            const findings = analysis.findings || [];
+            if (findings.length > 0) {
+                findingsDiv.innerHTML = findings.map(finding => `
+                    <div class="card">
+                        <div class="card-title">${finding.title || 'Finding'}</div>
+                        <div class="card-meta">
+                            <span class="confidence">${finding.confidence || 0}% confidence</span>
+                            <br>${finding.summary || 'No summary'}
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                findingsDiv.innerHTML = '<div class="no-data">No findings synthesized</div>';
+            }
+
+            // Bifurcation
+            const bifDiv = document.getElementById('bifurcation');
+            const bif = analysis.bifurcation;
+            if (bif && bif.identified) {
+                bifDiv.innerHTML = `
+                    <div class="bifurcation">
+                        <strong>🚨 Bifurcation Point Identified</strong>
+                        <p><strong>Confidence:</strong> ${bif.confidence || 0}%</p>
+                        <p><strong>Recommendation:</strong> ${bif.monitoring_recommendation || 'Monitor closely'}</p>
+                        <p><strong>Indicators:</strong></p>
+                        <ul>${(bif.indicators || []).map(ind => `<li>${ind}</li>`).join('')}</ul>
+                    </div>
+                `;
+            } else {
+                bifDiv.innerHTML = '<p>No bifurcation point identified</p>';
+            }
+
+            // Mission Impact
+            const impactDiv = document.getElementById('impact');
+            const impact = analysis.mission_impact;
+            if (impact) {
+                impactDiv.innerHTML = `<p><strong>Goals Served:</strong> ${impact.goals_served?.length || 0} of ${impact.goals_total || 7}</p>`;
+            }
+
+            document.getElementById('results').style.display = 'block';
+        }
+
+        async function loadRecent() {
+            try {
+                const res = await fetch('/api/analysis/recent');
+                const data = await res.json();
+
+                // Recent Signals
+                const signalsDiv = document.getElementById('recentSignals');
+                if (data.signals && data.signals.length > 0) {
+                    signalsDiv.innerHTML = data.signals.slice(0, 5).map(sig => `
+                        <div class="card">
+                            <div class="card-title">${sig.description || sig.domain || 'Signal'}</div>
+                            <div class="card-meta">
+                                <span class="severity ${(sig.severity || 'unknown').toLowerCase()}">${(sig.severity || 'UNKNOWN').toUpperCase()}</span>
+                                Node ${sig.node_id || 'N/A'} | ${sig.date_recorded ? new Date(sig.date_recorded).toLocaleDateString() : 'Recent'}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    signalsDiv.innerHTML = '<div class="no-data">No signals yet</div>';
+                }
+
+                // Recent Findings
+                const findingsDiv = document.getElementById('recentFindings');
+                if (data.findings && data.findings.length > 0) {
+                    findingsDiv.innerHTML = data.findings.slice(0, 5).map(finding => `
+                        <div class="card">
+                            <div class="card-title">${finding.mechanism || 'Finding'}</div>
+                            <div class="card-meta">
+                                <span class="confidence">${Math.round((finding.confidence_level || 0) * 100)}% confidence</span>
+                                <br>${(finding.finding_text || 'No text').substring(0, 100)}...
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    findingsDiv.innerHTML = '<div class="no-data">No findings yet</div>';
+                }
+            } catch(e) {
+                console.error('Error loading recent:', e);
+                document.getElementById('recentSignals').innerHTML = '<div class="no-data">Error loading signals</div>';
+                document.getElementById('recentFindings').innerHTML = '<div class="no-data">Error loading findings</div>';
+            }
+        }
+
+        loadRecent();
+        setInterval(loadRecent, 30000);
+    </script>
+</body>
+</html>
